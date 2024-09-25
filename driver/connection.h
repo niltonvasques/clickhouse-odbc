@@ -19,10 +19,10 @@ class Connection
 {
 private:
     using ChildType = Child<Environment, Connection>;
-    const std::string session_id;
     std::string url;
 
 public: // Configuration fields.
+    std::string session_id;
     std::string dsn;
     std::string proto;
     std::string username;
@@ -46,7 +46,7 @@ public:
     std::string useragent;
 
     std::unique_ptr<Poco::Net::HTTPClientSession> session;
-    int retry_count = 3;
+    int retry_count = 20;
     int redirect_limit = 10;
 
 public:
@@ -58,6 +58,8 @@ public:
     Poco::URI getUri() const;
 
     void connect(const std::string & connection_string);
+
+    void resetSessionId();
 
     // Return a Base64 encoded string of "user:password".
     std::string buildCredentialsString() const;

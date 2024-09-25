@@ -76,11 +76,24 @@ void Statement::requestNextPackOfResultSets(std::unique_ptr<ResultMutator> && mu
 
     auto & connection = getParent();
 
-    if (connection.session && response && in)
-        if (in->fail() || !in->eof())
-            connection.session->reset();
+    // Regenerate the session_id to ensure a new session
+    connection.resetSessionId();
+
+    // Create and set up a new HTTP session for each request to avoid reusing the session
+    connection.session = std::make_unique<Poco::Net::HTTPClientSession>();
+    connection.session->setHost(connection.server);
+    connection.session->setPort(connection.port);
+    connection.session->setKeepAlive(true);
+    connection.session->setTimeout(Poco::Timespan(connection.connection_timeout, 0),
+                                   Poco::Timespan(connection.timeout, 0),
+                                   Poco::Timespan(connection.timeout, 0));
+    connection.session->setKeepAliveTimeout(Poco::Timespan(86400, 0));  // 24 hours
+
 
     Poco::URI uri = connection.getUri();
+
+    // Ensure the new session_id is included in the URI
+    uri.addQueryParameter("session_id", connection.session_id);
 
     const auto param_bindings = getParamsBindingInfo(next_param_set_idx);
 

@@ -75,6 +75,11 @@ const TypeInfo & Connection::getTypeInfo(const std::string & type_name, const st
     return getParent().getTypeInfo(tmp_type_name, tmp_type_name_without_parameters);
 }
 
+// generate another session id
+void Connection::resetSessionId() {
+    session_id = GenerateSessionId();
+}
+
 Poco::URI Connection::getUri() const {
     Poco::URI uri(url);
 

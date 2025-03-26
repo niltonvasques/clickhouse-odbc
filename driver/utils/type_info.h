@@ -144,7 +144,7 @@ bool isMappedToStringDataSourceType(SQLSMALLINT sql_type, SQLSMALLINT c_type) no
 // Directly write raw bytes to the buffer, respecting its size.
 // All lengths are in bytes. If 'out_value_max_length == 0',
 // assume 'out_value' is able to hold the entire 'in_value'.
-// Throw exceptions on some detected errors, but tolerate right truncations.
+// Tolerates right truncations.  Caller is responsible for checking for truncation
 template <typename LengthType1, typename LengthType2>
 inline void fillOutputBufferInternal(
     const void * in_value,
@@ -169,7 +169,6 @@ inline void fillOutputBufferInternal(
 }
 
 // Directly write raw bytes to the buffer.
-// Throw on all errors, including right truncations.
 template <typename LengthType1, typename LengthType2, typename LengthType3>
 inline SQLRETURN fillOutputBuffer(
     const void * in_value,
@@ -186,12 +185,9 @@ inline SQLRETURN fillOutputBuffer(
     );
 
     if (out_value_length)
-        *out_value_length = in_value_length;
+        *out_value_length = std::min(in_value_length, static_cast<LengthType1>(out_value_max_length)); // Corrected length.
 
-    if (in_value_length > out_value_max_length)
-        throw SqlException("String data, right truncated", "01004", SQL_SUCCESS_WITH_INFO);
-
-    return SQL_SUCCESS;
+    return SQL_SUCCESS; //  Let caller handle truncation.
 }
 
 // Change encoding, when appropriate, and write the result to the buffer.
@@ -233,22 +229,18 @@ inline SQLRETURN fillOutputString(
 
     if (out_value_length) {
         if (out_length_in_bytes)
-            *out_value_length = converted_length_in_bytes;
+            *out_value_length = std::min(converted_length_in_bytes, static_cast<decltype(converted_length_in_bytes)>(out_value_max_length_in_bytes));
         else
-            *out_value_length = converted_length_in_symbols;
+            *out_value_length = std::min(converted_length_in_symbols, static_cast<decltype(converted_length_in_symbols)>(out_value_max_length_in_symbols));
     }
 
-    if (ensure_nts && out_value) {
-        if (converted_length_in_symbols < out_value_max_length_in_symbols)
-            reinterpret_cast<CharType *>(out_value)[converted_length_in_symbols] = CharType{};
-        else if (out_value_max_length_in_symbols > 0)
-            reinterpret_cast<CharType *>(out_value)[out_value_max_length_in_symbols - 1] = CharType{};
+    if (ensure_nts && out_value && (converted_length_in_symbols < out_value_max_length_in_symbols)) {
+      reinterpret_cast<CharType *>(out_value)[converted_length_in_symbols] = CharType{};
+    } else if (ensure_nts && out_value && out_value_max_length_in_symbols > 0) {
+       reinterpret_cast<CharType *>(out_value)[out_value_max_length_in_symbols - 1] = CharType{};
     }
 
-    if ((converted_length_in_symbols + 1) > out_value_max_length_in_symbols) // +1 for null terminating character
-        throw SqlException("String data, right truncated", "01004", SQL_SUCCESS_WITH_INFO);
-
-    return SQL_SUCCESS;
+    return SQL_SUCCESS; // Caller handles truncation.
 }
 
 template <typename CharType, typename LengthType1, typename LengthType2, typename ConversionContext = DefaultConversionContext>
